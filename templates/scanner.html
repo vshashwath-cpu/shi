@@ -1,0 +1,614 @@
+{% extends "base.html" %}
+
+{% block title %}Label Scanner & Visual Inspection Studio{% endblock %}
+
+{% block head %}
+<style>
+    .canvas-container {
+        position: relative;
+        overflow: hidden;
+        background: #0f172a;
+        border-radius: 0.75rem;
+        user-select: none;
+    }
+    #labelCanvas {
+        display: block;
+        max-width: 100%;
+        height: auto;
+        cursor: crosshair;
+    }
+    .badge-pass { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-warning { background-color: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
+    .badge-fail { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Page Header & Presets -->
+    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-xs font-semibold">Rule Matrix Engine</span>
+                <span class="text-xs text-slate-500 font-mono">LMPC Rules 2011 &bull; Schedule II</span>
+            </div>
+            <h1 class="text-xl sm:text-2xl font-bold text-slate-900 mt-1">Packaged Commodity Visual Inspection Studio</h1>
+            <p class="text-xs text-slate-500 mt-0.5">Upload packaging imagery or select benchmark commodities for statutory verification</p>
+        </div>
+
+        <!-- Quick Benchmark Sample Loader -->
+        <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs font-medium text-slate-600">Quick Test Benchmark:</span>
+            <select id="sampleSelect" onchange="loadPresetSample(this.value)" class="bg-slate-50 border border-slate-300 text-slate-900 text-xs rounded-lg focus:ring-blue-500 focus:border-blue-500 p-2 font-medium">
+                <option value="">-- Choose Sample Commodity --</option>
+                {% for s in samples %}
+                <option value="{{ s.id }}" {% if preset_sample and preset_sample.id == s.id %}selected{% endif %}>
+                    {{ s.id }}: {{ s.brand }} - {{ s.commodity_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Main Studio Split Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Column: Image Ingestion & Interactive Visual Canvas (7 cols) -->
+        <div class="lg:col-span-7 space-y-4">
+            
+            <!-- Upload / Input Card -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+                <form id="scanForm" enctype="multipart/form-data" class="space-y-4">
+                    <input type="hidden" name="sample_id" id="formSampleId" value="{% if preset_sample %}{{ preset_sample.id }}{% endif %}">
+
+                    <!-- Drag and Drop Dropzone -->
+                    <div id="dropzone" class="border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-500 hover:bg-blue-50/30 transition cursor-pointer relative">
+                        <input type="file" id="imageInput" name="image" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                        <div class="flex flex-col items-center justify-center space-y-2 pointer-events-none">
+                            <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                                <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+                            </div>
+                            <div class="text-sm font-semibold text-slate-800">
+                                Drag & drop commodity label image, or <span class="text-blue-600">Browse</span>
+                            </div>
+                            <p class="text-[11px] text-slate-500">Supports Front PDP, Back Label, High-Resolution JPEG/PNG/WebP</p>
+                        </div>
+                    </div>
+
+                    <!-- Physical Packaging Dimensions & PDP Configuration -->
+                    <div class="bg-slate-50 p-3.5 rounded-lg border border-slate-200">
+                        <div class="text-xs font-semibold text-slate-800 mb-2 flex items-center justify-between">
+                            <span>Principal Display Panel (PDP) & Packaging Parameters:</span>
+                            <span id="pdpAreaDisplay" class="text-[11px] text-blue-600 font-mono">Calculated PDP Area: -- cm²</span>
+                        </div>
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <div>
+                                <label class="block text-[10px] uppercase font-semibold text-slate-500 mb-1">Shape</label>
+                                <select id="pkgShape" name="packaging_shape" onchange="updatePDPDisplay()" class="w-full text-xs p-1.5 rounded border border-slate-300 bg-white">
+                                    <option value="rectangular">Rectangular</option>
+                                    <option value="cylindrical">Cylindrical</option>
+                                    <option value="other">Other / Pouch</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[10px] uppercase font-semibold text-slate-500 mb-1">Height (cm)</label>
+                                <input type="number" step="0.5" id="pkgHeight" name="height_cm" value="20" oninput="updatePDPDisplay()" class="w-full text-xs p-1.5 rounded border border-slate-300 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] uppercase font-semibold text-slate-500 mb-1">Width (cm)</label>
+                                <input type="number" step="0.5" id="pkgWidth" name="width_cm" value="12" oninput="updatePDPDisplay()" class="w-full text-xs p-1.5 rounded border border-slate-300 bg-white">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] uppercase font-semibold text-slate-500 mb-1">Depth / Dia (cm)</label>
+                                <input type="number" step="0.5" id="pkgDepth" name="depth_cm" value="5" oninput="updatePDPDisplay()" class="w-full text-xs p-1.5 rounded border border-slate-300 bg-white">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="startCamera()" class="px-3 py-2 text-xs font-semibold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition flex items-center gap-1.5">
+                                <i data-lucide="camera" class="w-4 h-4"></i> Live Camera
+                            </button>
+                            <span id="fileSelectedName" class="text-xs text-slate-500 italic truncate max-w-xs">No file chosen</span>
+                        </div>
+                        <button type="button" onclick="executeInspection()" id="scanBtn" class="px-5 py-2 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow transition flex items-center gap-2">
+                            <i data-lucide="scan-eye" class="w-4 h-4"></i> Run Statutory Inspection
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Interactive Canvas Card -->
+            <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-3">
+                <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                    <div class="flex items-center gap-2">
+                        <h2 class="text-sm font-bold text-slate-900">Spatial Label Inspection Canvas</h2>
+                        <span id="detectedBoxesCount" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-semibold">0 Declarations</span>
+                    </div>
+                    <!-- Canvas Controls -->
+                    <div class="flex items-center gap-2">
+                        <button type="button" onclick="toggleOverlay('all')" class="text-[11px] px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium transition">All Boxes</button>
+                        <button type="button" onclick="toggleOverlay('violations')" class="text-[11px] px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold transition">Violations Only</button>
+                        <button type="button" onclick="resetCanvasZoom()" class="text-[11px] px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 font-medium transition" title="Reset View">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Canvas Area -->
+                <div class="canvas-container flex items-center justify-center min-h-[380px]">
+                    <div id="canvasEmptyState" class="text-center p-8 text-slate-400 space-y-2">
+                        <i data-lucide="image" class="w-12 h-12 mx-auto text-slate-600"></i>
+                        <p class="text-xs">No packaging image loaded yet.</p>
+                        <p class="text-[11px] text-slate-500">Select a benchmark commodity above or upload a photo to inspect declarations.</p>
+                    </div>
+                    <canvas id="labelCanvas" class="hidden"></canvas>
+                </div>
+
+                <!-- Canvas Legend -->
+                <div class="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-600 pt-1">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-emerald-500 border border-emerald-600"></span>
+                        <span>Compliant Declaration</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-amber-500 border border-amber-600"></span>
+                        <span>Warning / Discrepancy</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3 h-3 rounded-full bg-rose-500 border border-rose-600"></span>
+                        <span>Statutory Violation</span>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Right Column: Statutory Verdict & Verification Matrix (5 cols) -->
+        <div class="lg:col-span-5 space-y-4">
+
+            <!-- Verdict & Score Card -->
+            <div id="verdictCard" class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm space-y-4">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <div class="text-[11px] uppercase font-bold tracking-wider text-slate-500">Statutory Compliance Status</div>
+                        <div id="verdictStatusBadge" class="text-base font-bold text-slate-800 mt-0.5">Awaiting Analysis</div>
+                    </div>
+                    <div class="text-right">
+                        <div class="text-[11px] font-semibold text-slate-500">Compliance Score</div>
+                        <div id="verdictScore" class="text-2xl font-black text-slate-800">-- / 100</div>
+                    </div>
+                </div>
+
+                <!-- Score Progress Bar -->
+                <div class="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                    <div id="verdictScoreBar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-500" style="width: 0%"></div>
+                </div>
+
+                <!-- Legal Recommendation Box -->
+                <div id="recommendationBox" class="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 space-y-1">
+                    <div class="font-bold text-slate-900 flex items-center gap-1.5">
+                        <i data-lucide="scale" class="w-4 h-4 text-blue-600"></i> Legal Metrology Officer Action:
+                    </div>
+                    <p id="recommendationText" class="text-slate-600">Select a product or upload label imagery to initiate automated statutory compliance check.</p>
+                </div>
+
+                <!-- Action Button Toolbar -->
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <a id="downloadPdfBtn" href="#" class="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold opacity-50 pointer-events-none transition">
+                        <i data-lucide="file-down" class="w-3.5 h-3.5"></i> Download PDF
+                    </a>
+                    <button type="button" id="issueNoticeBtn" onclick="issueStatutoryNotice()" class="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold opacity-50 pointer-events-none transition">
+                        <i data-lucide="mail-warning" class="w-3.5 h-3.5"></i> Issue Sec 36 Notice
+                    </button>
+                </div>
+            </div>
+
+            <!-- Mandatory Declarations Matrix Table -->
+            <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <div class="px-5 py-3.5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                    <div>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-800">Mandatory Declarations Audit</h3>
+                        <p class="text-[10px] text-slate-500">Verification against LMPC 2011 Rules 6(1), 9, 12, 13 & 18</p>
+                    </div>
+                    <span id="auditCountBadge" class="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-200 text-slate-700">0 Passed</span>
+                </div>
+
+                <div class="max-h-[480px] overflow-y-auto divide-y divide-slate-100 text-xs" id="auditMatrixList">
+                    <!-- Placeholder when empty -->
+                    <div class="p-8 text-center text-slate-400 space-y-1">
+                        <i data-lucide="clipboard-check" class="w-8 h-8 mx-auto text-slate-300"></i>
+                        <p class="text-xs font-medium">No audit data</p>
+                        <p class="text-[11px] text-slate-500">Run inspection to populate compliance results.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inspector Human-In-The-Loop Override Modal (Inline) -->
+            <div id="inspectorOverrideSection" class="hidden bg-slate-50 p-4 rounded-xl border border-blue-200 space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-blue-900 flex items-center gap-1.5">
+                        <i data-lucide="edit-3" class="w-3.5 h-3.5 text-blue-600"></i> Human-In-The-Loop Inspector Override
+                    </span>
+                    <button type="button" onclick="closeInspectorOverride()" class="text-slate-400 hover:text-slate-600 text-xs">Close</button>
+                </div>
+                <div class="space-y-2 text-xs">
+                    <div>
+                        <label class="block text-[10px] uppercase font-semibold text-slate-500 mb-0.5">Edit Field Value:</label>
+                        <input type="text" id="overrideFieldValue" class="w-full text-xs p-1.5 rounded border border-slate-300 bg-white">
+                    </div>
+                    <button type="button" onclick="applyInspectorOverride()" class="w-full py-1.5 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold">
+                        Re-evaluate Rule Matrix
+                    </button>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+
+</div>
+
+<!-- Camera Modal -->
+<div id="cameraModal" class="fixed inset-0 z-50 bg-black/75 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+        <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <i data-lucide="camera" class="w-4 h-4 text-blue-600"></i> Live Commodity Capture
+            </h3>
+            <button type="button" onclick="stopCamera()" class="text-slate-400 hover:text-slate-600">&times;</button>
+        </div>
+        <div class="relative rounded-lg overflow-hidden bg-black aspect-video flex items-center justify-center">
+            <video id="cameraStream" autoplay playsinline class="w-full h-full object-cover"></video>
+        </div>
+        <div class="flex justify-end gap-2">
+            <button type="button" onclick="stopCamera()" class="px-3 py-1.5 rounded bg-slate-100 text-xs font-medium text-slate-700">Cancel</button>
+            <button type="button" onclick="captureSnapshot()" class="px-4 py-1.5 rounded bg-blue-600 text-white text-xs font-bold flex items-center gap-1.5">
+                <i data-lucide="aperture" class="w-3.5 h-3.5"></i> Capture & Inspect
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // State Variables
+    let currentImage = null;
+    let currentInspectionId = null;
+    let currentBoundingBoxes = [];
+    let activeFilter = 'all';
+    let mediaStream = null;
+
+    const canvas = document.getElementById('labelCanvas');
+    const ctx = canvas.getContext('2d');
+    const emptyState = document.getElementById('canvasEmptyState');
+
+    // Drag and Drop Setup
+    const dropzone = document.getElementById('dropzone');
+    const imageInput = document.getElementById('imageInput');
+
+    imageInput.addEventListener('change', function(e) {
+        if (this.files && this.files[0]) {
+            const file = this.files[0];
+            document.getElementById('fileSelectedName').textContent = file.name;
+            document.getElementById('formSampleId').value = '';
+            loadLocalImageFile(file);
+        }
+    });
+
+    function loadLocalImageFile(file) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            const img = new Image();
+            img.onload = function() {
+                currentImage = img;
+                renderCanvas();
+            };
+            img.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function updatePDPDisplay() {
+        const h = parseFloat(document.getElementById('pkgHeight').value) || 20;
+        const w = parseFloat(document.getElementById('pkgWidth').value) || 12;
+        const shape = document.getElementById('pkgShape').value;
+        let area = 0;
+        if (shape === 'rectangular') {
+            area = (h * w).toFixed(1);
+        } else if (shape === 'cylindrical') {
+            const dia = parseFloat(document.getElementById('pkgDepth').value) || 5;
+            area = (0.40 * h * Math.PI * dia).toFixed(1);
+        } else {
+            area = (h * w * 0.8).toFixed(1);
+        }
+        document.getElementById('pdpAreaDisplay').textContent = `Calculated PDP Area: ${area} cm²`;
+    }
+    updatePDPDisplay();
+
+    // Preset Benchmark loader
+    function loadPresetSample(sampleId) {
+        if (!sampleId) return;
+        document.getElementById('formSampleId').value = sampleId;
+        document.getElementById('fileSelectedName').textContent = `Preset: ${sampleId}`;
+        executeInspection();
+    }
+
+    // Execute Inspection via API
+    async function executeInspection() {
+        const scanBtn = document.getElementById('scanBtn');
+        scanBtn.disabled = true;
+        scanBtn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Analyzing...`;
+        lucide.createIcons();
+
+        const form = document.getElementById('scanForm');
+        const formData = new FormData(form);
+
+        try {
+            const res = await fetch('/api/scan', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+
+            if (data.error) {
+                alert(`Inspection Error: ${data.error}`);
+                return;
+            }
+
+            currentInspectionId = data.inspection_id;
+            currentBoundingBoxes = data.bounding_boxes || [];
+
+            // Load and draw image
+            if (data.image_url) {
+                const img = new Image();
+                img.onload = function() {
+                    currentImage = img;
+                    renderCanvas();
+                };
+                img.src = data.image_url;
+            }
+
+            // Update UI widgets
+            renderVerdictCard(data.evaluation);
+            renderAuditMatrix(data.evaluation, data.extracted_data);
+
+            // Enable PDF and Notice buttons
+            const pdfBtn = document.getElementById('downloadPdfBtn');
+            pdfBtn.href = data.pdf_url;
+            pdfBtn.classList.remove('opacity-50', 'pointer-events-none');
+
+            const noticeBtn = document.getElementById('issueNoticeBtn');
+            noticeBtn.classList.remove('opacity-50', 'pointer-events-none');
+
+        } catch (err) {
+            console.error(err);
+            alert('Failed to connect to inspection server.');
+        } finally {
+            scanBtn.disabled = false;
+            scanBtn.innerHTML = `<i data-lucide="scan-eye" class="w-4 h-4"></i> Run Statutory Inspection`;
+            lucide.createIcons();
+        }
+    }
+
+    // Render Canvas & Overlays
+    function renderCanvas() {
+        if (!currentImage) return;
+
+        emptyState.classList.add('hidden');
+        canvas.classList.remove('hidden');
+
+        canvas.width = currentImage.width;
+        canvas.height = currentImage.height;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(currentImage, 0, 0);
+
+        document.getElementById('detectedBoxesCount').textContent = `${currentBoundingBoxes.length} Declarations`;
+
+        // Draw Bounding Boxes
+        currentBoundingBoxes.forEach((item, index) => {
+            if (activeFilter === 'violations' && item.status === 'pass') {
+                return;
+            }
+
+            const bbox = item.bbox; // [ymin, xmin, ymax, xmax]
+            const ymin = bbox[0];
+            const xmin = bbox[1];
+            const ymax = bbox[2];
+            const xmax = bbox[3];
+            const w = xmax - xmin;
+            const h = ymax - ymin;
+
+            let color = '#22c55e'; // Green
+            let bgFill = 'rgba(34, 197, 94, 0.15)';
+            if (item.status === 'fail') {
+                color = '#ef4444'; // Red
+                bgFill = 'rgba(239, 68, 68, 0.20)';
+            } else if (item.status === 'warning') {
+                color = '#f59e0b'; // Amber
+                bgFill = 'rgba(245, 158, 11, 0.20)';
+            }
+
+            // Box outline & fill
+            ctx.fillStyle = bgFill;
+            ctx.fillRect(xmin, ymin, w, h);
+
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = color;
+            ctx.strokeRect(xmin, ymin, w, h);
+
+            // Tag Header
+            ctx.fillStyle = color;
+            ctx.fillRect(xmin, ymin - 16, Math.min(w, 130), 16);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 10px Inter, sans-serif';
+            ctx.fillText(item.label.substring(0, 18), xmin + 4, ymin - 4);
+        });
+    }
+
+    function toggleOverlay(type) {
+        activeFilter = type;
+        renderCanvas();
+    }
+
+    function resetCanvasZoom() {
+        renderCanvas();
+    }
+
+    // Render Verdict Card
+    function renderVerdictCard(ev) {
+        const score = ev.compliance_score;
+        const statusBadge = document.getElementById('verdictStatusBadge');
+        const scoreDisplay = document.getElementById('verdictScore');
+        const scoreBar = document.getElementById('verdictScoreBar');
+        const recText = document.getElementById('recommendationText');
+
+        scoreDisplay.textContent = `${score}%`;
+        scoreBar.style.width = `${score}%`;
+
+        if (ev.status.includes('CRITICAL')) {
+            statusBadge.innerHTML = `<span class="text-rose-600 flex items-center gap-1.5"><i data-lucide="alert-octagon" class="w-4 h-4"></i> Critical Non-Compliance</span>`;
+            scoreBar.className = 'h-2.5 rounded-full bg-rose-600';
+        } else if (ev.status.includes('MAJOR')) {
+            statusBadge.innerHTML = `<span class="text-amber-600 flex items-center gap-1.5"><i data-lucide="alert-triangle" class="w-4 h-4"></i> Major Defects Observed</span>`;
+            scoreBar.className = 'h-2.5 rounded-full bg-amber-500';
+        } else {
+            statusBadge.innerHTML = `<span class="text-emerald-600 flex items-center gap-1.5"><i data-lucide="check-circle-2" class="w-4 h-4"></i> Compliant with LMPC 2011</span>`;
+            scoreBar.className = 'h-2.5 rounded-full bg-emerald-600';
+        }
+
+        recText.textContent = ev.recommended_action;
+        lucide.createIcons();
+    }
+
+    // Render Audit Matrix
+    function renderAuditMatrix(ev, extData) {
+        const container = document.getElementById('auditMatrixList');
+        const passedCount = ev.counts.passed;
+        document.getElementById('auditCountBadge').textContent = `${passedCount} of ${ev.counts.total_checks} Compliant`;
+
+        let html = '';
+
+        // Violations first
+        ev.violations.forEach(v => {
+            const sevColor = v.severity === 'CRITICAL' ? 'badge-fail' : 'badge-warning';
+            html += `
+                <div class="p-3.5 hover:bg-rose-50/40 transition flex items-start justify-between gap-3 border-l-4 border-rose-500">
+                    <div class="space-y-1">
+                        <div class="flex items-center gap-2">
+                            <span class="font-bold text-slate-900">${v.declaration}</span>
+                            <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ${sevColor}">${v.severity}</span>
+                        </div>
+                        <p class="text-[11px] text-rose-700 font-medium">${v.issue}</p>
+                        <p class="text-[10px] text-slate-500 font-mono">${v.citation}</p>
+                        <p class="text-[10px] text-slate-600"><b>Remedy:</b> ${v.remedy}</p>
+                    </div>
+                </div>
+            `;
+        });
+
+        // Compliant declarations
+        ev.checks_passed.forEach(p => {
+            html += `
+                <div class="p-3.5 hover:bg-slate-50 transition flex items-start justify-between gap-3 border-l-4 border-emerald-500">
+                    <div class="space-y-0.5">
+                        <div class="flex items-center gap-2">
+                            <span class="font-semibold text-slate-800">${p.declaration}</span>
+                            <span class="text-[10px] font-semibold px-1.5 py-0.2 rounded badge-pass">PASSED</span>
+                        </div>
+                        <p class="text-[11px] text-slate-600 truncate max-w-sm">${p.extracted_value}</p>
+                        <p class="text-[10px] text-slate-400 font-mono">${p.rule}</p>
+                    </div>
+                    <i data-lucide="check" class="w-4 h-4 text-emerald-600 shrink-0 mt-1"></i>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+        lucide.createIcons();
+    }
+
+    // Issue Statutory Notice Action
+    async function issueStatutoryNotice() {
+        if (!currentInspectionId) return;
+        if (!confirm("Confirm dispatch of formal Statutory Show-Cause Notice under Section 36 of Legal Metrology Act, 2009?")) return;
+
+        try {
+            const res = await fetch(`/api/inspection/${currentInspectionId}/update`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    notice_issued: true,
+                    officer_notes: "Statutory notice dispatched via Central Enforcement Portal. 15 days cure window granted."
+                })
+            });
+            const data = await res.json();
+            alert("Official Notice Dispatched and logged into Department Enforcement Registry.");
+        } catch (e) {
+            alert("Failed to issue notice.");
+        }
+    }
+
+    // Camera Features
+    async function startCamera() {
+        const modal = document.getElementById('cameraModal');
+        const video = document.getElementById('cameraStream');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        try {
+            mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = mediaStream;
+        } catch (err) {
+            console.error("Camera access failed:", err);
+            alert("Could not access camera. Please allow webcam permissions.");
+            stopCamera();
+        }
+    }
+
+    function stopCamera() {
+        const modal = document.getElementById('cameraModal');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+            mediaStream = null;
+        }
+    }
+
+    function captureSnapshot() {
+        const video = document.getElementById('cameraStream');
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = video.videoWidth || 640;
+        tempCanvas.height = video.videoHeight || 480;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(video, 0, 0, tempCanvas.width, tempCanvas.height);
+
+        tempCanvas.toBlob(blob => {
+            const file = new File([blob], "camera_snapshot.jpg", { type: "image/jpeg" });
+            const dataTransfer = new DataTransfer();
+            dataTransfer.items.add(file);
+            imageInput.files = dataTransfer.files;
+            document.getElementById('fileSelectedName').textContent = "Camera Snapshot";
+            document.getElementById('formSampleId').value = '';
+            stopCamera();
+            loadLocalImageFile(file);
+            executeInspection();
+        }, "image/jpeg", 0.95);
+    }
+
+    // Auto-trigger if sample_id provided in query param
+    window.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sampleId = urlParams.get('sample_id');
+        if (sampleId) {
+            loadPresetSample(sampleId);
+        }
+    });
+</script>
+{% endblock %}

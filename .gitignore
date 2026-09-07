@@ -1,0 +1,14 @@
+﻿__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+cloudflared.exe
+tunnel.log
+active_tunnel.tmp
+flask_check.tmp
+ACTIVE_GLOBAL_URL.txt
+lmpc_inspections.db

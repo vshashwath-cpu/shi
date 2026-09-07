@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings & Statutory Configuration{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto space-y-6">
+
+    <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
+        <h1 class="text-xl font-bold text-slate-900">System Configuration & AI Engine</h1>
+        <p class="text-xs text-slate-500 mt-0.5">Manage inspecting officer credentials, multimodal vision API keys, and regulatory settings</p>
+    </div>
+
+    <!-- Configuration Form -->
+    <form method="POST" action="{{ url_for('settings') }}" class="space-y-6">
+
+        <!-- Officer Credentials -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+                <i data-lucide="user-check" class="w-4 h-4 text-blue-600"></i> Enforcement Officer Profile & Jurisdiction
+            </h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Inspecting Officer Name & Designation</label>
+                    <input type="text" name="officer_name" value="{{ config.officer_name }}" class="w-full p-2 rounded-lg border border-slate-300 focus:ring-blue-500 bg-slate-50">
+                </div>
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Officer Badge / Authorization ID</label>
+                    <input type="text" name="officer_id" value="{{ config.officer_id }}" class="w-full p-2 rounded-lg border border-slate-300 focus:ring-blue-500 bg-slate-50">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block font-semibold text-slate-700 mb-1">Departmental Jurisdiction / Zone</label>
+                    <input type="text" name="jurisdiction" value="{{ config.jurisdiction }}" class="w-full p-2 rounded-lg border border-slate-300 focus:ring-blue-500 bg-slate-50">
+                </div>
+            </div>
+        </div>
+
+        <!-- Multi-Modal AI Engine Configuration -->
+        <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2">
+                    <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i> Multimodal AI & Vision Engine Integration
+                </h2>
+                {% if config.gemini_api_key %}
+                <span class="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Gemini Cloud API Enabled
+                </span>
+                {% else %}
+                <span class="px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[11px] font-bold">
+                    Local Rule-Matrix Engine (Air-Gapped Mode)
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="space-y-3 text-xs">
+                <p class="text-slate-600 leading-relaxed">
+                    The platform features a <b>Dual-Mode Architecture</b>: It functions 100% locally and offline using deterministic OpenCV/Pillow spatial processing and regex/NLP parsers. You can optionally connect a Google Gemini 2.5 Flash API Key to unlock cloud-scale multimodal zero-shot visual label comprehension.
+                </p>
+
+                <div>
+                    <label class="block font-semibold text-slate-700 mb-1">Google Gemini API Key (Optional)</label>
+                    <input type="password" name="gemini_api_key" value="{{ config.gemini_api_key }}" placeholder="AIzaSy..." class="w-full p-2 rounded-lg border border-slate-300 focus:ring-blue-500 font-mono bg-slate-50">
+                    <p class="text-[11px] text-slate-500 mt-1">Leave empty to use built-in local deterministic label parsing engine.</p>
+                </div>
+            </div>
+
+            <div class="pt-2 flex justify-end">
+                <button type="submit" class="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-sm">
+                    <i data-lucide="save" class="w-3.5 h-3.5"></i> Save Settings
+                </button>
+            </div>
+        </div>
+
+    </form>
+
+    <!-- Statutory Reference Tables for Enforcement Officers -->
+    <div class="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+        <h2 class="text-sm font-bold text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+            <i data-lucide="book-open" class="w-4 h-4 text-blue-600"></i> Statutory Legal Metrology Reference Guide (LMPC Rules, 2011)
+        </h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+
+            <!-- Schedule II Font Size Table -->
+            <div class="space-y-2">
+                <h3 class="font-bold text-slate-800">Schedule II: Minimum Font & Numeral Height</h3>
+                <div class="border border-slate-200 rounded-lg overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-200 text-left text-[11px]">
+                        <thead class="bg-slate-50 font-semibold text-slate-700">
+                            <tr>
+                                <th class="p-2">PDP Surface Area (A)</th>
+                                <th class="p-2">Normal Pack</th>
+                                <th class="p-2">Blown / Moulded</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-600">
+                            <tr><td class="p-2 font-mono">A &le; 50 cm²</td><td class="p-2 font-bold text-slate-800">1.0 mm</td><td class="p-2">2.0 mm</td></tr>
+                            <tr><td class="p-2 font-mono">50 &lt; A &le; 100 cm²</td><td class="p-2 font-bold text-slate-800">1.5 mm</td><td class="p-2">3.0 mm</td></tr>
+                            <tr><td class="p-2 font-mono">100 &lt; A &le; 500 cm²</td><td class="p-2 font-bold text-slate-800">2.0 mm</td><td class="p-2">4.0 mm</td></tr>
+                            <tr><td class="p-2 font-mono">500 &lt; A &le; 2500 cm²</td><td class="p-2 font-bold text-slate-800">4.0 mm</td><td class="p-2">6.0 mm</td></tr>
+                            <tr><td class="p-2 font-mono">A &gt; 2500 cm²</td><td class="p-2 font-bold text-slate-800">6.0 mm</td><td class="p-2">8.0 mm</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Standard vs Prohibited Units Table -->
+            <div class="space-y-2">
+                <h3 class="font-bold text-slate-800">Rule 12 & 13: Approved vs Prohibited Unit Symbols</h3>
+                <div class="border border-slate-200 rounded-lg overflow-hidden">
+                    <table class="min-w-full divide-y divide-slate-200 text-left text-[11px]">
+                        <thead class="bg-slate-50 font-semibold text-slate-700">
+                            <tr>
+                                <th class="p-2">Measurement</th>
+                                <th class="p-2 text-emerald-700">Statutory Standard</th>
+                                <th class="p-2 text-rose-700">Prohibited (Violation)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-100 text-slate-600">
+                            <tr><td class="p-2 font-medium">Mass / Weight</td><td class="p-2 text-emerald-700 font-mono font-bold">g, kg, mg</td><td class="p-2 text-rose-600 font-mono">gms, gm, kgs, kg., kilos</td></tr>
+                            <tr><td class="p-2 font-medium">Liquid Volume</td><td class="p-2 text-emerald-700 font-mono font-bold">ml, l, L, kL</td><td class="p-2 text-rose-600 font-mono">mls, ml., ltrs, litres, ltr</td></tr>
+                            <tr><td class="p-2 font-medium">Unit Numbers</td><td class="p-2 text-emerald-700 font-mono font-bold">N, U</td><td class="p-2 text-rose-600 font-mono">nos, no., pcs, pieces, pkts</td></tr>
+                            <tr><td class="p-2 font-medium">Dimensions</td><td class="p-2 text-emerald-700 font-mono font-bold">mm, cm, m</td><td class="p-2 text-rose-600 font-mono">mtrs, cms, inch, in.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+</div>
+{% endblock %}
