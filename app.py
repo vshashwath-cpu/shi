@@ -37,13 +37,23 @@ os.makedirs(SAMPLE_DIR, exist_ok=True)
 Database.init_db()
 SampleRepository.generate_sample_images(SAMPLE_DIR)
 
-# System configurations
-SYSTEM_CONFIG = {
-    "gemini_api_key": os.environ.get("GEMINI_API_KEY", ""),
-    "officer_name": "Rajesh Sharma, Inspector Legal Metrology",
-    "officer_id": "LM-INSP-DELHI-04",
-    "jurisdiction": "Central Enforcement Wing, New Delhi"
-}
+def get_system_config() -> dict:
+    """
+    Dynamically retrieve configuration merged from persistent database settings and environment variables.
+    """
+    saved = Database.get_all_settings()
+    return {
+        "gemini_api_key": (saved.get("gemini_api_key") or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip(),
+        "officer_name": saved.get("officer_name") or os.environ.get("OFFICER_NAME", "Rajesh Sharma, Inspector Legal Metrology"),
+        "officer_id": saved.get("officer_id") or os.environ.get("OFFICER_ID", "LM-INSP-DELHI-04"),
+        "jurisdiction": saved.get("jurisdiction") or os.environ.get("JURISDICTION", "Central Enforcement Wing, New Delhi")
+    }
+
+@app.context_processor
+def inject_config():
+    return {"config": get_system_config()}
+
+SYSTEM_CONFIG = get_system_config()
 
 # Pre-seed initial sample inspections into DB if empty
 def seed_initial_inspections():
@@ -106,7 +116,7 @@ def dashboard():
     Executive & Enforcement Dashboard displaying overall KPIs, charts, and recent scans.
     """
     stats = Database.get_dashboard_stats()
-    return render_template("dashboard.html", stats=stats, config=SYSTEM_CONFIG)
+    return render_template("dashboard.html", stats=stats, config=get_system_config())
 
 
 @app.route("/scanner")
@@ -122,7 +132,7 @@ def scanner():
         "scanner.html",
         samples=SampleRepository.SAMPLES,
         preset_sample=preset_sample,
-        config=SYSTEM_CONFIG
+        config=get_system_config()
     )
 
 
@@ -147,7 +157,7 @@ def repository():
         search_query=search_query,
         status_filter=status_filter,
         category_filter=category_filter,
-        config=SYSTEM_CONFIG
+        config=get_system_config()
     )
 
 
@@ -160,7 +170,7 @@ def view_inspection(inspection_id):
     if not insp:
         flash(f"Inspection record {inspection_id} not found.", "error")
         return redirect(url_for("repository"))
-    return render_template("report_view.html", inspection=insp, config=SYSTEM_CONFIG)
+    return render_template("report_view.html", inspection=insp, config=get_system_config())
 
 
 @app.route("/report/<inspection_id>/pdf")
@@ -190,17 +200,28 @@ def download_pdf_report(inspection_id):
 @app.route("/settings", methods=["GET", "POST"])
 def settings():
     """
-    System configuration and API key settings.
+    System configuration and API key settings (persisted in SQLite).
     """
-    global SYSTEM_CONFIG
     if request.method == "POST":
-        SYSTEM_CONFIG["gemini_api_key"] = request.form.get("gemini_api_key", "").strip()
-        SYSTEM_CONFIG["officer_name"] = request.form.get("officer_name", "").strip()
-        SYSTEM_CONFIG["officer_id"] = request.form.get("officer_id", "").strip()
-        SYSTEM_CONFIG["jurisdiction"] = request.form.get("jurisdiction", "").strip()
-        flash("System configuration updated successfully.", "success")
+        key = request.form.get("gemini_api_key", "").strip()
+        officer_name = request.form.get("officer_name", "").strip()
+        officer_id = request.form.get("officer_id", "").strip()
+        jurisdiction = request.form.get("jurisdiction", "").strip()
+
+        Database.set_setting("gemini_api_key", key)
+        if officer_name:
+            Database.set_setting("officer_name", officer_name)
+        if officer_id:
+            Database.set_setting("officer_id", officer_id)
+        if jurisdiction:
+            Database.set_setting("jurisdiction", jurisdiction)
+
+        if key:
+            os.environ["GEMINI_API_KEY"] = key
+
+        flash("System configuration updated and saved persistently.", "success")
         return redirect(url_for("settings"))
-    return render_template("settings.html", config=SYSTEM_CONFIG)
+    return render_template("settings.html", config=get_system_config())
 
 
 # ------------------- REST API Endpoints -------------------
@@ -257,7 +278,8 @@ def api_scan():
             file.save(image_local_path)
             image_web_url = f"/static/uploads/{unique_filename}"
 
-            vision_engine = OCRVisionEngine(gemini_api_key=SYSTEM_CONFIG.get("gemini_api_key"))
+            cfg = get_system_config()
+            vision_engine = OCRVisionEngine(gemini_api_key=cfg.get("gemini_api_key"))
             vision_result = vision_engine.analyze_image(image_local_path, package_dimensions)
 
             extracted_data = vision_result["extracted_data"]
@@ -281,6 +303,7 @@ def api_scan():
         inspection_id = f"INSP-{datetime.now().strftime('%Y%m%d')}-{random_suffix}"
 
         # Construct inspection record
+        current_cfg = get_system_config()
         inspection_record = {
             "id": inspection_id,
             "product_id": sample_id or f"PRD-{random_suffix}",
@@ -288,8 +311,8 @@ def api_scan():
             "brand": brand,
             "category": category,
             "barcode": barcode,
-            "officer_id": SYSTEM_CONFIG["officer_id"],
-            "officer_name": SYSTEM_CONFIG["officer_name"],
+            "officer_id": current_cfg["officer_id"],
+            "officer_name": current_cfg["officer_name"],
             "inspection_date": datetime.now().isoformat(),
             "compliance_score": evaluation["compliance_score"],
             "status": evaluation["status"],
@@ -318,6 +341,8 @@ def api_scan():
             print(f"[API] Error generating PDF report: {e}")
 
         is_mock = vision_result.get("is_mock", False) if 'vision_result' in locals() else False
+        has_api_key = vision_result.get("has_api_key", False) if 'vision_result' in locals() else False
+        api_error = vision_result.get("api_error", None) if 'vision_result' in locals() else None
         warning = vision_result.get("warning", "") if 'vision_result' in locals() else ""
 
         return jsonify({
@@ -330,6 +355,8 @@ def api_scan():
             "image_url": image_web_url,
             "pdf_url": f"/report/{inspection_id}/pdf",
             "is_mock": is_mock,
+            "has_api_key": has_api_key,
+            "api_error": api_error,
             "warning": warning
         })
 

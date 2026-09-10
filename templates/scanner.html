@@ -169,18 +169,18 @@
         <!-- Right Column: Statutory Verdict & Verification Matrix (5 cols) -->
         <div class="lg:col-span-5 space-y-4">
 
-            <!-- Demo Mode Warning Banner -->
-            <div id="demoNoticeBanner" class="hidden p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs shadow-sm space-y-1.5 animate-pulse">
-                <div class="flex items-center gap-2 font-bold text-amber-900">
-                    <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-600 flex-shrink-0"></i>
-                    <span>Offline Demo Fallback Mode</span>
+            <!-- Demo Mode / API Error Warning Banner -->
+            <div id="demoNoticeBanner" class="hidden p-4 rounded-xl border text-xs shadow-sm space-y-1.5">
+                <div class="flex items-center gap-2 font-bold" id="demoNoticeTitle">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 flex-shrink-0"></i>
+                    <span id="demoNoticeHeading">Offline Demo Fallback Mode</span>
                 </div>
-                <p class="text-[11px] text-amber-800 leading-relaxed">
-                    No Gemini API Key is configured on the server. The scanner is showing static placeholder benchmark data (<b>National Consumer Products Ltd.</b>) for this upload.
+                <p id="demoNoticeText" class="text-[11px] leading-relaxed">
+                    No Gemini API Key is configured on the server.
                 </p>
                 <div class="pt-1">
-                    <a href="{{ url_for('settings') }}" class="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold text-[11px] transition">
-                        <i data-lucide="key" class="w-3 h-3"></i> Add Free Gemini API Key in Settings &rarr;
+                    <a href="{{ url_for('settings') }}" class="inline-flex items-center gap-1.5 px-3 py-1 rounded font-bold text-[11px] transition" id="demoNoticeLink">
+                        <i data-lucide="key" class="w-3 h-3"></i> Configure API Key in Settings &rarr;
                     </a>
                 </div>
             </div>
@@ -392,10 +392,28 @@
             renderVerdictCard(data.evaluation);
             renderAuditMatrix(data.evaluation, data.extracted_data);
 
-            // Toggle demo mode banner
+            // Toggle demo / error notice banner
             const demoBanner = document.getElementById('demoNoticeBanner');
+            const demoHeading = document.getElementById('demoNoticeHeading');
+            const demoText = document.getElementById('demoNoticeText');
+            const demoLink = document.getElementById('demoNoticeLink');
+
             if (data.is_mock) {
                 demoBanner.classList.remove('hidden');
+                if (data.has_api_key && data.api_error) {
+                    demoBanner.className = "p-4 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-xs shadow-sm space-y-1.5";
+                    demoHeading.textContent = "Gemini API Request Error";
+                    demoText.innerHTML = `An API key was sent, but Google Gemini API returned an error: <b class="font-mono text-rose-800">${data.api_error}</b>.<br>The system temporarily used placeholder benchmark data.`;
+                    demoLink.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded bg-rose-200 hover:bg-rose-300 text-rose-900 font-bold text-[11px] transition";
+                    demoLink.innerHTML = `<i data-lucide="key" class="w-3 h-3"></i> Verify API Key in Settings &rarr;`;
+                } else {
+                    demoBanner.className = "p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs shadow-sm space-y-1.5";
+                    demoHeading.textContent = "Offline Demo Fallback Mode";
+                    demoText.innerHTML = "No Gemini API Key is configured on the server. The scanner is displaying static placeholder benchmark data (<b>National Consumer Products Ltd.</b>) for this upload.";
+                    demoLink.className = "inline-flex items-center gap-1.5 px-3 py-1 rounded bg-amber-200 hover:bg-amber-300 text-amber-900 font-bold text-[11px] transition";
+                    demoLink.innerHTML = `<i data-lucide="key" class="w-3 h-3"></i> Add Free Gemini API Key in Settings &rarr;`;
+                }
+                lucide.createIcons();
             } else {
                 demoBanner.classList.add('hidden');
             }

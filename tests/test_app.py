@@ -88,6 +88,20 @@ class TestAppIntegration(unittest.TestCase):
         self.assertEqual(updated['officer_notes'], "Tested officer update note via test_app.")
         self.assertEqual(updated['notice_issued'], 1)
 
+    def test_settings_persistence(self):
+        """POST /settings persists configuration to the database."""
+        response = self.client.post('/settings', data={
+            "gemini_api_key": "AIzaSyTestKey12345",
+            "officer_name": "Test Inspector",
+            "officer_id": "TEST-007",
+            "jurisdiction": "Test Zone"
+        }, follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+
+        # Verify persisted in database
+        self.assertEqual(Database.get_setting("gemini_api_key"), "AIzaSyTestKey12345")
+        self.assertEqual(Database.get_setting("officer_name"), "Test Inspector")
+
 
 if __name__ == '__main__':
     unittest.main()

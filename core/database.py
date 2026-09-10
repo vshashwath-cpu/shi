@@ -74,7 +74,43 @@ class Database:
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
             """)
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS system_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            )
+            """)
             conn.commit()
+
+    @classmethod
+    def get_setting(cls, key: str, default: Optional[str] = None) -> Optional[str]:
+        cls.init_db()
+        with cls.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM system_settings WHERE key = ?", (key,))
+            row = cursor.fetchone()
+            if row and row['value'] is not None:
+                return row['value']
+            return default
+
+    @classmethod
+    def set_setting(cls, key: str, value: str):
+        cls.init_db()
+        with cls.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT OR REPLACE INTO system_settings (key, value) VALUES (?, ?)
+            """, (key, value))
+            conn.commit()
+
+    @classmethod
+    def get_all_settings(cls) -> Dict[str, str]:
+        cls.init_db()
+        with cls.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT key, value FROM system_settings")
+            return {row['key']: row['value'] for row in cursor.fetchall()}
 
     @classmethod
     def save_inspection(cls, record: Dict[str, Any]) -> str:

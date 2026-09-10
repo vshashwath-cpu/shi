@@ -37,17 +37,30 @@ class OCRVisionEngine:
         with Image.open(image_path) as img:
             width_px, height_px = img.size
 
+        api_key = (self.gemini_api_key or "").strip()
+        has_key = bool(api_key)
+
         # If Gemini API key is configured, attempt multimodal analysis
-        if self.gemini_api_key:
+        if has_key:
             try:
                 gemini_result = self._call_gemini_vision(image_path)
                 if gemini_result:
                     return self._process_gemini_response(gemini_result, width_px, height_px, package_dimensions)
             except Exception as e:
-                print(f"[VisionEngine] Gemini API call failed or timed out: {e}. Falling back to local engine.")
+                err_msg = str(e)
+                print(f"[VisionEngine] Gemini API call failed: {err_msg}. Falling back to demo mode.")
+                fallback = self._local_heuristic_analysis(image_path, width_px, height_px, package_dimensions)
+                fallback["has_api_key"] = True
+                fallback["api_error"] = err_msg
+                fallback["warning"] = f"Gemini API request failed: {err_msg}"
+                return fallback
 
         # Local intelligent OCR & rule-assisted vision parser
-        return self._local_heuristic_analysis(image_path, width_px, height_px, package_dimensions)
+        fallback = self._local_heuristic_analysis(image_path, width_px, height_px, package_dimensions)
+        fallback["has_api_key"] = False
+        fallback["api_error"] = None
+        fallback["warning"] = "No Gemini API Key configured. Showing static demo data. Add your free Gemini API Key in Settings to scan real products."
+        return fallback
 
     def _call_gemini_vision(self, image_path: str) -> Optional[Dict[str, Any]]:
         """
@@ -119,7 +132,7 @@ class OCRVisionEngine:
                     data=json.dumps(payload).encode("utf-8"),
                     headers={"Content-Type": "application/json"}
                 )
-                with urllib.request.urlopen(req, timeout=20) as resp:
+                with urllib.request.urlopen(req, timeout=25) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     text = data["candidates"][0]["content"]["parts"][0]["text"]
                     text = re.sub(r'^```json\s*', '', text.strip(), flags=re.MULTILINE)
@@ -127,11 +140,22 @@ class OCRVisionEngine:
                     parsed = json.loads(text.strip())
                     print(f"[VisionEngine] Successfully extracted declarations using {model}")
                     return parsed
+            except urllib.error.HTTPError as e:
+                err_msg = ""
+                try:
+                    raw_err = e.read().decode("utf-8")
+                    err_json = json.loads(raw_err)
+                    err_msg = err_json.get("error", {}).get("message", "")
+                except Exception:
+                    pass
+                detailed = err_msg or f"HTTP {e.code}: {e.reason}"
+                last_error = detailed
+                print(f"[VisionEngine] Model {model} failed: {detailed}. Trying next...")
             except Exception as e:
-                last_error = e
-                print(f"[VisionEngine] Model {model} failed: {e}. Trying next...")
+                last_error = str(e)
+                print(f"[VisionEngine] Model {model} error: {e}. Trying next...")
 
-        raise RuntimeError(f"All Gemini models failed. Last error: {last_error}")
+        raise RuntimeError(f"{last_error}")
 
     def _process_gemini_response(
         self,
