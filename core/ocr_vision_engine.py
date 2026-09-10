@@ -120,8 +120,8 @@ class OCRVisionEngine:
             "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
         }
 
-        # Try multiple Gemini models with gemini-3.6-flash as primary
-        models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        # Supported active Flash models for this API key
+        models_to_try = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.7-flash"]
         last_error = None
 
         for model in models_to_try:
