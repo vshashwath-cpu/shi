@@ -120,8 +120,8 @@ class OCRVisionEngine:
             "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
         }
 
-        # Try multiple Gemini models for high reliability
-        models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"]
+        # Try multiple Gemini models with gemini-3.6-flash as primary
+        models_to_try = ["gemini-3.6-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
         last_error = None
 
         for model in models_to_try:
