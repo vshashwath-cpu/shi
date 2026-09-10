@@ -317,6 +317,9 @@ def api_scan():
         except Exception as e:
             print(f"[API] Error generating PDF report: {e}")
 
+        is_mock = vision_result.get("is_mock", False) if 'vision_result' in locals() else False
+        warning = vision_result.get("warning", "") if 'vision_result' in locals() else ""
+
         return jsonify({
             "success": True,
             "inspection_id": inspection_id,
@@ -325,7 +328,9 @@ def api_scan():
             "bounding_boxes": bounding_boxes,
             "pdp_info": pdp_info,
             "image_url": image_web_url,
-            "pdf_url": f"/report/{inspection_id}/pdf"
+            "pdf_url": f"/report/{inspection_id}/pdf",
+            "is_mock": is_mock,
+            "warning": warning
         })
 
     except Exception as e:

@@ -52,9 +52,19 @@ class OCRVisionEngine:
     def _call_gemini_vision(self, image_path: str) -> Optional[Dict[str, Any]]:
         """
         Calls Google Gemini API using native HTTP request (urllib) without external SDK dependencies.
+        Tries multiple models (gemini-1.5-flash, gemini-2.0-flash, gemini-2.5-flash) for maximum compatibility.
         """
         import urllib.request
         import urllib.error
+
+        ext = os.path.splitext(image_path)[1].lower()
+        mime_map = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp"
+        }
+        mime_type = mime_map.get(ext, "image/jpeg")
 
         with open(image_path, "rb") as f:
             b64_image = base64.b64encode(f.read()).decode("utf-8")
@@ -87,30 +97,41 @@ class OCRVisionEngine:
         }
         """
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={self.gemini_api_key}"
         payload = {
             "contents": [{
                 "parts": [
                     {"text": prompt},
-                    {"inline_data": {"mime_type": "image/jpeg", "data": b64_image}}
+                    {"inline_data": {"mime_type": mime_type, "data": b64_image}}
                 ]
             }],
             "generationConfig": {"temperature": 0.1, "responseMimeType": "application/json"}
         }
 
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"}
-        )
+        # Try multiple Gemini models for high reliability
+        models_to_try = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"]
+        last_error = None
 
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            text = data["candidates"][0]["content"]["parts"][0]["text"]
-            # Clean possible markdown formatting
-            text = re.sub(r'^```json\s*', '', text.strip(), flags=re.MULTILINE)
-            text = re.sub(r'```$', '', text.strip(), flags=re.MULTILINE)
-            return json.loads(text.strip())
+        for model in models_to_try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.gemini_api_key}"
+            try:
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req, timeout=20) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    text = re.sub(r'^```json\s*', '', text.strip(), flags=re.MULTILINE)
+                    text = re.sub(r'```$', '', text.strip(), flags=re.MULTILINE)
+                    parsed = json.loads(text.strip())
+                    print(f"[VisionEngine] Successfully extracted declarations using {model}")
+                    return parsed
+            except Exception as e:
+                last_error = e
+                print(f"[VisionEngine] Model {model} failed: {e}. Trying next...")
+
+        raise RuntimeError(f"All Gemini models failed. Last error: {last_error}")
 
     def _process_gemini_response(
         self,
@@ -125,9 +146,21 @@ class OCRVisionEngine:
         boxes = []
         raw_boxes = gemini_data.get("detected_bounding_boxes", [])
         for rb in raw_boxes:
+            ymin = rb.get("ymin", 0)
+            xmin = rb.get("xmin", 0)
+            ymax = rb.get("ymax", 50)
+            xmax = rb.get("xmax", 200)
+
+            # If Gemini returned 0..1000 normalized coordinates, scale to image dimensions
+            if 0 <= ymin <= 1000 and 0 <= ymax <= 1000 and (ymax > 1 or height_px > 1000):
+                ymin = int(ymin * height_px / 1000.0)
+                ymax = int(ymax * height_px / 1000.0)
+                xmin = int(xmin * width_px / 1000.0)
+                xmax = int(xmax * width_px / 1000.0)
+
             boxes.append({
                 "label": rb.get("label", "Declaration"),
-                "bbox": [rb.get("ymin", 0), rb.get("xmin", 0), rb.get("ymax", 50), rb.get("xmax", 200)],
+                "bbox": [ymin, xmin, ymax, xmax],
                 "text": rb.get("text", ""),
                 "status": "pass"
             })
@@ -137,6 +170,7 @@ class OCRVisionEngine:
 
         return {
             "source": "gemini_vlm",
+            "is_mock": False,
             "image_size": {"width": width_px, "height": height_px},
             "extracted_data": gemini_data,
             "bounding_boxes": boxes,
@@ -189,7 +223,9 @@ class OCRVisionEngine:
         ]
 
         return {
-            "source": "local_vision_engine",
+            "source": "local_mock_fallback",
+            "is_mock": True,
+            "warning": "No Gemini API Key configured. Showing demo placeholder data. Add your free Gemini API Key in Settings to extract real text from live packaging.",
             "image_size": {"width": width_px, "height": height_px},
             "extracted_data": extracted,
             "bounding_boxes": bounding_boxes,
